@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebSocket Test Client (v2)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            max-width: 900px;
+            margin: 20px auto;
+            color: #333;
+        }
+        .container {
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin-top: 15px;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        h1, h2 {
+            text-align: center;
+            color: #111;
+        }
+        fieldset {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        legend {
+            font-weight: bold;
+            padding: 0 10px;
+            color: #555;
+        }
+        #log {
+            box-sizing: border-box;
+            width: 100%;
+            height: 350px;
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 13px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .hidden {
+            display: none;
+        }
+        input[type="text"] {
+            box-sizing: border-box;
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 15px;
+            margin-right: 8px;
+            margin-top: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>WebSocket Test Client</h1>
+    <p style="text-align: center;"><b>Status:</b> <span id="status">Disconnected</span></p>
+
+    <div id="connection-form" class="container">
+        <h2>1. Connect to Server</h2>
+        <input type="text" id="serverAddress" value="ws://localhost:8080" placeholder="Enter Server Address (e.g., ws://localhost:8080)" />
+        <input type="text" id="roomName" value="minecraft-test-server" placeholder="Enter Room Name (e.g., Minecraft Server IP)" />
+        <input type="text" id="userId" placeholder="Your User ID (e.g., alice)" />
+        <input type="text" id="whitelist" value="*" placeholder="Initial Whitelist (comma-separated, or *)" />
+        <button id="connectButton">Connect</button>
+    </div>
+
+    <div id="actions-form" class="container hidden">
+        <h2>2. Actions</h2>
+        
+        <fieldset>
+            <legend>Send Direct Message</legend>
+            <input type="text" id="recipientId" placeholder="Recipient User ID (e.g., bob)" />
+            <input type="text" id="messageText" placeholder="Message Payload (will be sent as JSON)" />
+            <button id="sendButton">Send Message</button>
+        </fieldset>
+
+        <fieldset>
+            <legend>Manage Whitelist</legend>
+            <input type="text" id="whitelistUser" placeholder="User ID to Add/Remove" />
+            <button id="addButton">Add to Whitelist</button>
+            <button id="removeButton">Remove from Whitelist</button>
+            <br>
+            <button id="enableWildcardButton">Enable Wildcard (*)</button>
+            <button id="disableWildcardButton">Disable Wildcard (Accept None)</button>
+        </fieldset>
+    </div>
+
+    <textarea id="log" readonly></textarea>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+
+        let socket;
+
+        const ui = {
+            status: document.getElementById('status'),
+            connectionForm: document.getElementById('connection-form'),
+            actionsForm: document.getElementById('actions-form'),
+            log: document.getElementById('log'),
+            serverAddress: document.getElementById('serverAddress'),
+            roomName: document.getElementById('roomName'),
+            userId: document.getElementById('userId'),
+            whitelist: document.getElementById('whitelist'),
+            recipientId: document.getElementById('recipientId'),
+            messageText: document.getElementById('messageText'),
+            whitelistUser: document.getElementById('whitelistUser'),
+            connectButton: document.getElementById('connectButton'),
+            sendButton: document.getElementById('sendButton'),
+            addButton: document.getElementById('addButton'),
+            removeButton: document.getElementById('removeButton'),
+            enableWildcardButton: document.getElementById('enableWildcardButton'),
+            disableWildcardButton: document.getElementById('disableWildcardButton'),
+        };
+
+        /**
+         * Appends a message to the log textarea and auto-scrolls to the bottom.
+         * @param {string} message The message to log.
+         */
+        function logMessage(message) {
+            ui.log.value += message + '\n\n';
+            ui.log.scrollTop = ui.log.scrollHeight;
+        }
+
+        /**
+         * A centralized function to send a JSON payload to the server.
+         * It handles stringification and logging.
+         * @param {object} payload The JavaScript object to send.
+         */
+        function sendJson(payload) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                const message = JSON.stringify(payload);
+                socket.send(message);
+                logMessage(`[Sent] -->\n${JSON.stringify(payload, null, 2)}`);
+            } else {
+                logMessage('[System] Cannot send message: WebSocket is not connected.');
+            }
+        }
+        
+        /**
+         * Toggles the visibility of the connection and action forms.
+         * @param {'connected' | 'disconnected'} state The current connection state.
+         */
+        function updateUiState(state) {
+            if (state === 'connected') {
+                ui.connectionForm.classList.add('hidden');
+                ui.actionsForm.classList.remove('hidden');
+            } else {
+                ui.connectionForm.classList.remove('hidden');
+                ui.actionsForm.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Handles the 'open' event of the WebSocket connection.
+         * The first message sent MUST be the 'register' message.
+         */
+        function handleOpen() {
+            logMessage("[System] Connection opened. Sending registration...");
+            ui.status.innerText = 'Connected. Registering...';
+
+            const whitelistInput = ui.whitelist.value;
+            const whitelistArray = whitelistInput === '*' ? ['*'] : whitelistInput.split(',').map(item => item.trim()).filter(Boolean);
+            
+            sendJson({
+                type: 'register',
+                user_id: ui.userId.value,
+                whitelist: whitelistArray
+            });
+            
+            ui.status.innerText = `Connected as ${ui.userId.value}`;
+            updateUiState('connected');
+        }
+
+        /**
+         * Handles the 'message' event, logging any data received from the server.
+         * @param {MessageEvent} event The message event from the WebSocket.
+         */
+        function handleMessage(event) {
+            try {
+                const data = JSON.parse(event.data);
+                logMessage(`[Received] <--\n${JSON.stringify(data, null, 2)}`);
+            } catch (e) {
+                logMessage(`[Received] <--\n${event.data}`);
+            }
+        }
+
+        /**
+         * Handles the 'close' event, updating the UI and logging the reason.
+         * @param {CloseEvent} event The close event from the WebSocket.
+         */
+        function handleClose(event) {
+            ui.status.innerText = 'Disconnected';
+            let reason = event.reason ? `, Reason: ${event.reason}` : '';
+            logMessage(`[System] Connection closed. Code: ${event.code}${reason}`);
+            updateUiState('disconnected');
+        }
+
+        /**
+         * Handles any WebSocket errors.
+         */
+        function handleError() {
+            logMessage('[System] A WebSocket error occurred.');
+            ui.status.innerText = 'Error';
+            updateUiState('disconnected');
+        }
+
+        /**
+         * Initiates the WebSocket connection and assigns the event handlers.
+         */
+        function connect() {
+            const serverAddr = ui.serverAddress.value;
+            const room = ui.roomName.value;
+            const userId = ui.userId.value;
+            
+            if (!serverAddr || !room || !userId) {
+                alert("Server Address, Room Name, and User ID are all required.");
+                return;
+            }
+
+            const wsUrl = `${serverAddr}/${room}`;
+            logMessage(`[System] Attempting to connect to ${wsUrl}...`);
+            ui.status.innerText = 'Connecting...';
+            
+            socket = new WebSocket(wsUrl);
+            socket.onopen = handleOpen;
+            socket.onmessage = handleMessage;
+            socket.onclose = handleClose;
+            socket.onerror = handleError;
+        }
+
+        ui.connectButton.addEventListener('click', connect);
+
+        ui.sendButton.addEventListener('click', () => {
+            sendJson({
+                type: 'message',
+                recipient_id: ui.recipientId.value,
+                payload: {
+                    text: ui.messageText.value,
+                    timestamp: new Date().toISOString()
+                }
+            });
+            ui.messageText.value = '';
+        });
+
+        ui.addButton.addEventListener('click', () => {
+            sendJson({ type: 'whitelist_add', user_id: ui.whitelistUser.value });
+        });
+
+        ui.removeButton.addEventListener('click', () => {
+            sendJson({ type: 'whitelist_remove', user_id: ui.whitelistUser.value });
+        });
+
+        ui.enableWildcardButton.addEventListener('click', () => {
+            sendJson({ type: 'whitelist_toggle_wildcard', enabled: true });
+        });
+
+        ui.disableWildcardButton.addEventListener('click', () => {
+            sendJson({ type: 'whitelist_toggle_wildcard', enabled: false });
+        });
+    });
+</script>
+</body>
+</html>
