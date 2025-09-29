@@ -63,6 +63,7 @@ Deployed URL: wss:{your_server_name_here}.onrender.com/{minecraft_server_ip}
 All communication is done via JSON strings. Each message must have a "type" field that defines its purpose.
 
 #### Client to Server Messages
+---
 **1. Register a Client (register)**
 
 Sent once, immediately after connecting.
@@ -77,10 +78,13 @@ Sent once, immediately after connecting.
   "whitelist": ["9dc21885-3fb9-46b3-8979-0778e88657bc"]
 }
 ```
-
+---
 **2. Send a Message (message)**
+
 Sends a JSON payload to another user.
+
 `recipient_id`: The Minecraft UUID of the user you want to send the message to.
+
 `payload`: Any valid JSON object. This is where the data you send goes.
 ```JSON
 {
@@ -92,9 +96,11 @@ Sends a JSON payload to another user.
   }
 }
 ```
-
+---
 **3. Add to Whitelist (whitelist_add)**
+
 Adds a user's UUID to your whitelist.
+
 `user_id`: The player's Minecraft UUID.
 ```JSON
 {
@@ -102,9 +108,11 @@ Adds a user's UUID to your whitelist.
   "user_id": "9dc21885-3fb9-46b3-8979-0778e88657bc"
 }
 ```
-
+---
 **4. Remove from Whitelist (whitelist_remove)**
+
 Removes a user's UUID from your whitelist.
+
 `user_id`: The player's Minecraft UUID.
 ```JSON
 {
@@ -112,10 +120,13 @@ Removes a user's UUID from your whitelist.
   "user_id": "9dc21885-3fb9-46b3-8979-0778e88657bc"
 }
 ```
-
+---
 **5. Toggle Wildcard Whitelist (whitelist_toggle_wildcard)**
+
 Turns the wildcard (*) mode on or off.
+
 `enabled`: `true`: Accept messages from everyone in the room.
+
 `enabled`: `false`: Accept messages from no one (an empty whitelist).
 ```JSON
 {
@@ -123,9 +134,11 @@ Turns the wildcard (*) mode on or off.
   "enabled": true
 }
 ```
-
+---
 #### Server to Client Messages
+---
 **1. Incoming Message (incoming_message)**
+
 This is what a client receives when another user sends them a message.
 ```JSON
 {
@@ -137,8 +150,9 @@ This is what a client receives when another user sends them a message.
   }
 }
 ```
-
+---
 **2. Whitelist Updated (whitelist_updated)**
+
 A confirmation sent after a whitelist command is successfully processed.
 ```JSON
 {
@@ -147,8 +161,9 @@ A confirmation sent after a whitelist command is successfully processed.
   "current_whitelist": ["9dc21885-3fb9-46b3-8979-0778e88657bc", "6d629d34-fc89-4506-bd68-1637b2aec196"]
 }
 ```
-
+---
 **3. Error Message (error)**
+
 Sent when an action fails. The message is intentionally generic for security.
 ```JSON
 {
