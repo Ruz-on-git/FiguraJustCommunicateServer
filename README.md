@@ -54,7 +54,9 @@ Your Just Communicate library will need to follow this protocol to interact with
 ### Connecting
 A client connects to the server using a WebSocket URL. The path of the URL defines the room they are joining.
 For Just Communicate, the room_name should be the IP address of the Minecraft server.
+
 Local URL: ws://localhost:8080/{minecraft_server_ip}
+
 Deployed URL: wss:{your_server_name_here}.onrender.com/{minecraft_server_ip}
 
 ### Message Formats
@@ -62,8 +64,11 @@ All communication is done via JSON strings. Each message must have a "type" fiel
 
 #### Client to Server Messages
 **1. Register a Client (register)**
+
 Sent once, immediately after connecting.
+
 `user_id`: The clients's Minecraft UUID.
+
 `whitelist`: An array of UUIDs the client will accept messages from. Use ["*"] to accept from everyone in the room.
 ```JSON
 {
